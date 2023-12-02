@@ -2,7 +2,9 @@ from django.db import models
 from django.core.validators import MaxValueValidator
 from clients.models import Client
 from services.models import *
+from django.db.models.signals import post_delete
 from services.tasks import set_price, set_comment
+from services.receivers import delete_cache_total_sum
 
 
 class Service(models.Model):
@@ -63,7 +65,15 @@ class Subscription(models.Model):
     def __str__(self):
         return f'{self.client} {self.service} {self.plan}'
 
-    # def save(self, *args, save_model=True, **kwargs):
-    #     if save_model:
-    #         set_price.delay(self.id)
-    #     return super().save(*args, **kwargs)
+    # Действия при создании, проверяем, создание ли это или изменение if dreating:...
+    def save(self, *args, **kwargs):
+        creating = not bool(self.id)
+        result = super().save(*args, **kwargs)
+        if creating:
+            set_price.delay(self.id)
+        return result
+
+
+post_delete.connect(delete_cache_total_sum, sender=Subscription)
+
+
